@@ -1,0 +1,1143 @@
+<html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <style>
+        canvas {
+            background-color: #000000;
+        }
+    </style>
+    <title>cars</title>
+</head>
+
+<body><canvas id="arena" width="500" height="500">Canvas had an error loading...</canvas>
+
+
+
+<script>
+let car1;
+let car2;
+let c1,c2,c3,c4;
+let p1,p2,p3,p4;
+let b;
+let colliders = [];
+let timer;
+let maxTime = 5 * 60 * 50;
+let gameState = 0;
+let dy = 0;
+let overtime = false;
+
+let lastGoal = 0;
+let fastestGoal = 0;
+
+let colorTimer = 31 * 50;
+let allColors = {'RED':'#F00' , 'ORN':'#F70' , 'YLO':'#CC0' , 'GRN':'#0C0' , 'CYN':'#0CC' , 'BLU':'#0AF' ,'PRP':'#90E'};
+let colorIndex = ['RED','ORN','YLO','GRN','CYN','BLU','PRP'];
+
+let names = {'left':'ORN', 'right':'BLU'};
+let colors = {'left':allColors[names.left], 'right':allColors[names.right]};
+let pickedIndex = [1 , 5];
+let readyUp = [false, false];
+
+let version = 'version @7.2';
+
+arena = {
+    canvas: document.getElementById('arena'),
+    key: [],
+    width: 0,
+    height: 0,
+	borders: new V(125, 0),
+	goalHeight: 300,
+	goalLines: [],
+
+	score: [0,0],
+	stats: [{'side':0, 'touches':0, 'slams':0, 'saves':0, 'demos':0, 'fast':0}, {'side':1, 'touches':0, 'slams':0, 'saves':0, 'demos':0, 'fast':0}],
+    start: function() {
+        this.canvas.width = 1200;
+        this.canvas.height = 700;
+        this.width = this.canvas.width;
+        this.height = this.canvas.height*6/7;
+        
+		this.ctx = this.canvas.getContext("2d");
+		this.goalLines = [this.borders.x - 10, this.width-this.borders.x + 10];
+
+        window.addEventListener('keydown', function(e) {
+            if(arena.key.filter(value => e.key.toLowerCase()===value).length === 0)
+				arena.key.push(e.key.toLowerCase());
+			if(e.key.toLowerCase() === ' ' && gameState === 0){
+				arena.pick();
+				gameState = 2;
+			}
+			if(e.key.toLowerCase() === ' ' && gameState === 1){
+				arena.pick();
+				gameState = 2;
+			}
+			if(gameState === 2){
+				let k = e.key.toLowerCase();
+				if(!readyUp[1]){
+					switch(k){
+						case 'arrowleft': pickedIndex[1] = (pickedIndex[1] + 6)%7;
+							if(pickedIndex[0] == pickedIndex[1])
+								pickedIndex[1] = (pickedIndex[1] + 6)%7;
+							break;
+						case 'arrowright': pickedIndex[1] = (pickedIndex[1] + 1)%7;
+							if(pickedIndex[0] == pickedIndex[1])
+									pickedIndex[1] = (pickedIndex[1] + 1)%7;
+							break;
+						case 'arrowup': readyUp[1] = true;
+							break;
+					}
+				}
+
+				if(!readyUp[0]){
+					switch(k){
+						case 'a': pickedIndex[0] = (pickedIndex[0] + 6)%7;
+							if(pickedIndex[0] == pickedIndex[1])
+								pickedIndex[0] = (pickedIndex[0] + 6)%7;
+							break;
+						case 'd': pickedIndex[0] = (pickedIndex[0] + 1)%7;
+							if(pickedIndex[0] == pickedIndex[1])
+									pickedIndex[0] = (pickedIndex[0] + 1)%7;
+							break;
+						case 'w': readyUp[0] = true;
+					}
+				}
+			}
+			
+        })
+
+        window.addEventListener('keyup', function(e) {
+            arena.key = arena.key.filter(value => value != e.key.toLowerCase());
+        })
+		
+	},
+
+	drawMM: function(){
+		let ctx = this.ctx;
+		ctx.font = '50px Agency FB'
+		ctx.textAlign = 'center';
+		ctx.fillStyle = 'white';
+		ctx.fillText('cars', arena.width/2, arena.height/2);
+		ctx.font = '35px Agency FB';
+		ctx.fillText('Press <SPACE> to start', arena.width/2, arena.height/2 + 50);
+		ctx.font = '25px Agency FB';
+		ctx.fillText('(have fun in quarantine)', arena.width/2, arena.height/2 + 100);
+	},
+
+	drawField: function(){
+		this.ctx.textAlign = 'left';
+		//sidelines
+		this.ctx.fillStyle = 'white';
+		this.ctx.fillRect(this.borders.x, 0, 1, this.height-this.borders.y);
+		this.ctx.fillRect(this.width-this.borders.x, 0, 1, this.height-this.borders.y);
+
+		//hide sidelines
+		this.ctx.fillStyle = 'black';
+		this.ctx.fillRect(this.borders.x, this.height/2 - this.goalHeight/2, 1,this.goalHeight);
+		this.ctx.fillRect(this.width-this.borders.x, this.height/2 - this.goalHeight/2, 1, this.goalHeight);
+		
+		//midfield
+		this.ctx.fillStyle = 'white';
+		this.ctx.fillRect(this.width/2, 0, 1, this.height);
+
+		this.ctx.beginPath();
+		this.ctx.strokeStyle = 'white';
+		this.ctx.arc(arena.width/2, arena.height/2, b.r*2, 0, 2*Math.PI);
+		this.ctx.stroke();
+
+		this.ctx.beginPath();
+		this.ctx.arc(arena.width/2, arena.height/2, 5, 0, 2*Math.PI);
+		this.ctx.fill();
+
+		//goallines
+		this.ctx.fillStyle = colors.left;
+		this.ctx.fillRect(this.borders.x - 10, this.height/2 - this.goalHeight/2, 1, this.height-this.borders.y - this.goalHeight);
+		this.ctx.fillStyle = colors.right;
+		this.ctx.fillRect(this.width-this.borders.x + 10, this.height/2 - this.goalHeight/2, 1, this.height-this.borders.y - this.goalHeight);
+		
+		//nets
+		this.ctx.fillStyle = 'white';
+		this.ctx.fillRect(0, this.height/2 - this.goalHeight/2 + 10, this.borders.x - 10, 1);
+		this.ctx.fillRect(0, this.height/2 + this.goalHeight/2 - 11, this.borders.x - 10, 1);
+
+		this.ctx.fillRect(this.width - this.borders.x + 10, this.height/2 - this.goalHeight/2 + 10, this.borders.x - 10, 1);
+		this.ctx.fillRect(this.width - this.borders.x + 10, this.height/2 + this.goalHeight/2 - 11, this.borders.x - 10, 1);
+
+		//trim
+		this.ctx.fillStyle = colors.left;
+		this.ctx.fillRect(this.borders.x - 20, 0, 20, this.height/2 - this.goalHeight/2);
+		this.ctx.fillRect(this.borders.x - 20, this.height/2 + this.goalHeight/2, 20, this.height/2 - this.goalHeight/2);
+		this.ctx.fillRect(0, this.height/2 - this.goalHeight/2 - 10, this.borders.x - 10, 20);
+		this.ctx.fillRect(0, this.height/2 + this.goalHeight/2 - 10, this.borders.x - 10, 20);
+
+		this.ctx.fillStyle = colors.right;
+		this.ctx.fillRect(arena.width - this.borders.x, 0, 20, this.height/2 - this.goalHeight/2);
+		this.ctx.fillRect(arena.width - this.borders.x, this.height/2 + this.goalHeight/2, 20, this.height/2 - this.goalHeight/2);
+		this.ctx.fillRect(arena.width - arena.borders.x + 10, this.height/2 - this.goalHeight/2 - 10, this.borders.x - 10, 20);
+		this.ctx.fillRect(arena.width - arena.borders.x + 10, this.height/2 + this.goalHeight/2 - 10, this.borders.x - 10, 20);
+
+		//scoreboard
+		this.ctx.fillStyle = 'white'
+		this.ctx.fillRect(0, arena.height, arena.width, 1);
+		this.ctx.fillStyle = 'black';
+		this.ctx.fillRect(0, arena.height+1, arena.width, 99);
+
+		//cool shiz
+		this.ctx.beginPath();
+		this.ctx.fillStyle = colors.left
+		this.ctx.moveTo(0, arena.height + 30);
+		this.ctx.lineTo(0, arena.height + 70);
+		this.ctx.lineTo(arena.width/2 - 70, arena.height + 70);
+		this.ctx.lineTo(arena.width/2 - 80, arena.height + 30);
+		this.ctx.fill();
+
+		this.ctx.beginPath();
+		this.ctx.fillStyle = colors.right
+		this.ctx.moveTo(arena.width, arena.height + 30);
+		this.ctx.lineTo(arena.width, arena.height + 70);
+		this.ctx.lineTo(arena.width/2 + 70, arena.height + 70);
+		this.ctx.lineTo(arena.width/2 + 80, arena.height + 30);
+		this.ctx.fill();
+
+		//teamnames
+		this.ctx.font = '40px Agency FB';
+		this.ctx.fillStyle = 'white';
+		this.ctx.textAlign = 'center';
+		this.ctx.fillText(names.left, 406, arena.height + 65);
+		this.ctx.fillText(names.right, arena.width - 400, arena.height + 65);
+
+		this.ctx.textAlign = 'left';
+		//score
+		this.ctx.font = '70px Agency FB';
+		this.ctx.fillStyle = 'white';
+		this.ctx.fillText((this.score[0] + '0').length === 2? '0' + this.score[0]: this.score[0], arena.width/2 - 150, arena.height + 75);
+		this.ctx.fillText((this.score[1] + '0').length === 2? '0' + this.score[1]: this.score[1], arena.width/2 + 100, arena.height + 75);
+
+		//timer
+		if(overtime){
+			this.ctx.font = '40px Agency FB';
+			this.ctx.textAlign = 'center';
+			this.ctx.fillText('OVERTIME', arena.width/2, arena.height + 70);
+		}else{
+			this.ctx.fillText(':', arena.width/2 - 6, arena.height + 65);
+			this.ctx.font = '50px Agency FB';
+			
+			let secs = Math.floor(maxTime / 50) - Math.floor(timer / 50);
+			let sec = secs%60;
+			let min = Math.floor(secs/60);
+			
+			this.ctx.fillText((min < 10? '0':'')+min, arena.width/2 - 50, arena.height + 70);
+			this.ctx.fillText((sec < 10? '0':'')+sec, arena.width/2 + 6, arena.height + 70);
+		}
+
+		//goalspeed
+		this.ctx.font = '15px Agency FB';
+		this.ctx.textAlign = 'center';
+		this.ctx.fillText('last:' + lastGoal + ' | fastest:' + fastestGoal, arena.width/2, arena.height + 20);
+
+		//version
+		this.ctx.fillStyle = '#888';
+		this.ctx.font = '15px Courier New';
+		this.ctx.textAlign = 'center';
+		this.ctx.fillText(version, arena.width/2, arena.height + 95)
+	},
+
+    clear: function() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    },
+
+	pick: function(){
+		this.pause();
+		this.interval = setInterval(pickColors, 20);
+	},
+
+	play: function(){
+		this.pause();
+		this.interval = setInterval(update, 20);
+	},
+
+	playEnding(){
+		this.pause();
+		this.interval = setInterval(endGame, 20);
+	},
+
+	pause: function(){
+		clearInterval(this.interval);
+	}
+};
+
+
+startGame();
+
+
+function startGame() {
+	arena.start();
+	car1 = new car(100, arena.height/2, Math.PI/2, ['w', 'a', 'd'], colors.left);
+	car2 = new car(arena.width - 100, arena.height/2, -Math.PI/2, ['ArrowUp', 'ArrowLeft', 'ArrowRight'], colors.right);
+	
+	b = new ball();
+
+	p1 = new circle(arena.borders.x-10, (arena.height-arena.goalHeight)/2, 10,colors.left);
+	p2 = new circle(arena.borders.x-10, (arena.height+arena.goalHeight)/2, 10,colors.left);
+	p3 = new circle(arena.width-arena.borders.x+10, (arena.height-arena.goalHeight)/2, 10,colors.right);
+	p4 = new circle(arena.width-arena.borders.x+10, (arena.height+arena.goalHeight)/2, 10,colors.right);
+
+	colliders.push(p1);
+	colliders.push(p2);
+	colliders.push(p3);
+	colliders.push(p4);
+
+	timer = 0;
+
+	reset();
+	arena.drawMM();
+}
+
+function reset(){
+	car1 = new car(arena.width/2 - 350, arena.height/2 - 250, 3*Math.PI/4, ['w', 'a', 'd'], colors.left, 0);
+	car2 = new car(arena.width/2 + 350, arena.height/2 + 250, -Math.PI/4, ['ArrowUp', 'ArrowLeft', 'ArrowRight'], colors.right, 1);
+	
+	colliders = [];
+
+	p1 = new circle(arena.borders.x-10, (arena.height-arena.goalHeight)/2, 10,colors.left);
+	p2 = new circle(arena.borders.x-10, (arena.height+arena.goalHeight)/2, 10,colors.left);
+	p3 = new circle(arena.width-arena.borders.x+10, (arena.height-arena.goalHeight)/2, 10,colors.right);
+	p4 = new circle(arena.width-arena.borders.x+10, (arena.height+arena.goalHeight)/2, 10,colors.right);
+
+	colliders.push(p1);
+	colliders.push(p2);
+	colliders.push(p3);
+	colliders.push(p4);
+
+	b = new ball();
+}
+
+function update() {
+	arena.clear();
+	for(col of colliders)
+		col.draw();
+	arena.drawField();
+	b.update();
+	if(car1.disabled === 0 && car2.disabled === 0)
+		car1.collide(car2, true);
+	car1.update();
+	car2.update();
+
+	if(timer === maxTime && arena.score[0] === arena.score[1] && !overtime){
+		overtime = true;
+		timer = maxTime;
+		reset();
+	}
+
+	if(timer === maxTime && arena.score[0] === arena.score[1])
+		timer--;
+
+	if(timer >= maxTime){
+		arena.pause();
+		arena.playEnding();
+	}
+
+	if(car1.noinput === 0 && car2.noinput === 0)
+		timer++;
+}
+
+function pickColors() {
+	let ctx = arena.ctx;
+	let i = 0;
+
+	ctx.beginPath();
+	ctx.fillStyle = 'black';
+	ctx.fillRect(0,0,arena.canvas.width, arena.canvas.height);
+	
+	for(color in allColors){
+		ctx.beginPath();
+		ctx.fillStyle = allColors[color];
+		ctx.fillRect(i + arena.width/2 - 325,arena.canvas.height/2 - 25,50,50);
+
+		if(i/100 === pickedIndex[1]){//arrow selector
+			ctx.beginPath();
+			ctx.strokeStyle = readyUp[1]? 'yellow':'white';
+			ctx.rect(i + arena.width/2 - 325 - 2, arena.canvas.height/2 - 27,54,54);
+			ctx.stroke();
+
+			ctx.beginPath();
+			ctx.fillStyle = readyUp[1]? 'yellow':'white';
+			ctx.font = '20px Agency FB';
+			ctx.textAlign = 'center';
+			ctx.fillText('arrows', i + arena.width/2 - 300, arena.canvas.height/2 + 50);
+		}else if(i/100 === pickedIndex[0]){//wasd selector
+			ctx.beginPath();
+			ctx.strokeStyle = readyUp[0]? 'yellow':'white';
+			ctx.rect(i + arena.width/2 - 325 - 2, arena.canvas.height/2 - 27,54,54);
+			ctx.stroke();
+
+			ctx.beginPath();
+			ctx.fillStyle = readyUp[0]? 'yellow':'white';
+			ctx.font = '20px Agency FB';
+			ctx.textAlign = 'center';
+			ctx.fillText('wasd', i + arena.width/2 - 300, arena.canvas.height/2 + 50);
+		}else{
+			ctx.font = '50px Agency FB';
+			ctx.fillStyle = 'white';
+			ctx.textAlign = 'center';
+			let seconds = Math.ceil(colorTimer/50);
+			ctx.fillText(`Game begins in ${seconds} seconds.`, arena.width/2, 4*arena.height/5);
+		}
+
+		i+= 100;
+	}
+	//title
+	ctx.fillStyle = 'white';
+	ctx.beginPath();
+	ctx.font = '75px Agency FB';
+	ctx.textAlign = 'center';
+	ctx.fillText('PICK YOUR COLOR', arena.width/2, 90);
+
+	//cool shiz
+	ctx.fillStyle = colors.left
+	ctx.beginPath();
+	ctx.moveTo(0, 130 - (readyUp[0]? 10:0));
+	ctx.lineTo(0, 170 + (readyUp[0]? 10:0));
+	ctx.lineTo(arena.width/2 - 70, 170 + (readyUp[0]? 10:0));
+	ctx.lineTo(arena.width/2 - 80, 130 - (readyUp[0]? 10:0));
+	ctx.fill();
+
+	ctx.fillStyle = colors.right
+	ctx.beginPath();
+	ctx.moveTo(arena.width, 130 - (readyUp[1]? 10:0));
+	ctx.lineTo(arena.width, 170 + (readyUp[1]? 10:0));
+	ctx.lineTo(arena.width/2 + 70, 170 + (readyUp[1]? 10:0));
+	ctx.lineTo(arena.width/2 + 80, 130 - (readyUp[1]? 10:0));
+	ctx.fill();
+
+	//teamnames
+	ctx.font = '40px Agency FB';
+	ctx.fillStyle = 'white';
+	ctx.textAlign = 'center';
+	ctx.fillText(names.left, 406, 165);
+	ctx.fillText(names.right, arena.width - 400, 165);
+	ctx.fillText('VS', arena.width/2,  165);
+
+	names.left = colorIndex[pickedIndex[0]];
+		names.right = colorIndex[pickedIndex[1]];
+
+		colors.left = allColors[names.left];
+		colors.right = allColors[names.right];
+
+	if(readyUp[0] && readyUp[1] && colorTimer > 0)
+		colorTimer = 0;
+
+	colorTimer--;
+	if(colorTimer === -49){
+		reset();
+		arena.play();
+	}
+}
+
+function endGame() {
+	let ctx = arena.ctx;
+
+	if(dy > -5*arena.height/6)
+		dy -= 5;
+	else{
+		ctx.fillStyle = 'black'
+		ctx.fillRect(0,0,arena.width, 5*arena.height/6);
+		
+		ctx.font = '100px Agency FB'
+		ctx.fillStyle = '#FFF';
+		ctx.textAlign = 'center';
+		ctx.fillText('GAME OVER',arena.width/2, 100);
+	}	
+
+	//clear below the scoreboard
+	ctx.beginPath();
+	ctx.fillStyle = 'black';
+	ctx.fillRect(0, arena.canvas.height + dy, arena.width, -dy);
+	ctx.fill();
+
+	//scoreboard
+	ctx.fillStyle = 'white'
+	if(dy > -5*arena.height/6)
+		ctx.fillRect(0, arena.height + dy, arena.width, 1);
+	ctx.fillStyle = 'black';
+	ctx.fillRect(0, arena.height+1 + dy, arena.width, 99);
+
+	//cool shiz
+	ctx.fillStyle = colors.left
+	ctx.beginPath();
+	ctx.moveTo(0, arena.height + 30 + dy);
+	ctx.lineTo(0, arena.height + 70 + dy);
+	ctx.lineTo(arena.width/2 - 70, arena.height + 70 + dy);
+	ctx.lineTo(arena.width/2 - 80, arena.height + 30 + dy);
+	ctx.fill();
+
+	ctx.fillStyle = colors.right
+	ctx.beginPath();
+	ctx.moveTo(arena.width, arena.height + 30 + dy);
+	ctx.lineTo(arena.width, arena.height + 70 + dy);
+	ctx.lineTo(arena.width/2 + 70, arena.height + 70 + dy);
+	ctx.lineTo(arena.width/2 + 80, arena.height + 30 + dy);
+	ctx.fill();
+
+	//teamnames
+	ctx.font = '40px Agency FB';
+	ctx.fillStyle = 'white';
+	ctx.textAlign = 'center';
+	ctx.fillText(names.left, 406, arena.height + 65 + dy);
+	ctx.fillText(names.right, arena.width - 400, arena.height + 65 + dy);
+
+	ctx.textAlign = 'left';
+	//score
+	ctx.font = '70px Agency FB';
+	ctx.fillStyle = 'white';
+	ctx.fillText((arena.score[0] + '0').length === 2? '0' + arena.score[0]: arena.score[0], arena.width/2 - 150, arena.height + 75 + dy);
+	ctx.fillText((arena.score[1] + '0').length === 2? '0' + arena.score[1]: arena.score[1], arena.width/2 + 100, arena.height + 75 + dy);
+
+	//stats
+	ctx.textAlign = 'center';
+	ctx.fillStyle = '#FFF';
+	ctx.font = '75px Agency FB';
+	ctx.fillText(`${arena.score[0] > arena.score[1] ? names.left:names.right} WINS!`,arena.width/2, arena.height + 180 + dy);
+	ctx.font = '50px Agency FB';
+	ctx.fillText('SLAMS',arena.width/2, arena.height + 250 + dy);
+	ctx.fillText('TAPS',arena.width/2, arena.height + 300 + dy);
+	ctx.fillText('SAVES',arena.width/2, arena.height + 350 + dy);
+	ctx.fillText('DEMOS',arena.width/2, arena.height + 400 + dy);
+	ctx.fillText('FASTEST GOAL',arena.width/2, arena.height + 450 + dy);
+
+	ctx.fillStyle = colors.left;
+	ctx.fillText(arena.stats[0].slams, arena.width/2 - 200, arena.height + 250 + dy);
+	ctx.fillText(arena.stats[0].touches - arena.stats[0].slams, arena.width/2 - 200, arena.height + 300 + dy);
+	ctx.fillText(arena.stats[0].saves, arena.width/2 - 200, arena.height + 350 + dy);
+	ctx.fillText(arena.stats[0].demos, arena.width/2 - 200, arena.height + 400 + dy);
+	ctx.fillText(arena.stats[0].fast, arena.width/2 - 200, arena.height + 450 + dy);
+
+	ctx.fillStyle = colors.right;
+	ctx.fillText(arena.stats[1].slams, arena.width/2 + 200, arena.height + 250 + dy);
+	ctx.fillText(arena.stats[1].touches - arena.stats[1].slams, arena.width/2 + 200, arena.height + 300 + dy);
+	ctx.fillText(arena.stats[1].saves, arena.width/2 + 200, arena.height + 350 + dy);
+	ctx.fillText(arena.stats[1].demos, arena.width/2 + 200, arena.height + 400 + dy);
+	ctx.fillText(arena.stats[1].fast, arena.width/2 + 200, arena.height + 450 + dy);
+
+	//version
+	ctx.fillStyle = '#8884';
+	ctx.textAlign = 'center';
+	ctx.font = '15px Courier New';
+	ctx.fillText(version, arena.width/2, arena.height + 95)
+
+}
+
+function circle(x, y, r, c){
+	this.p = new V(x,y);
+	this.v = new V(0,0);
+	this.r = r;
+	this.c = c;
+	
+	this.draw = function(){
+		let ctx = arena.ctx;
+		ctx.beginPath();
+		ctx.fillStyle = this.c;
+		ctx.arc(...this.p.listify(), this.r, 0, Math.PI*2);
+		ctx.fill();
+
+	}
+}
+
+function car(x, y, a, inp, c, side){
+	this.p = new V(x,y);
+	this.initP = new V(x,y);
+	this.demoCircle = new V(x,y);
+	this.v = new V(0,0);
+	this.a = new V(0,0);
+	this.s = new V(15,30);
+	this.i = new V(0,0);
+	this.f = new V(.9, .93);
+	this.df = new V(0.97, 0.97);
+	this.bf = new V(0.9,0.9);
+	this.ang = a;
+	this.drift = false;
+	this.col = c;
+	this.bounceFactor = 1.1;
+	this.m = 0.99;
+	this.dscale = 0.65;//drift input scale for turn tuning
+	this.inputs = inp;
+	this.r = this.s.scale(1/2).mag();
+	this.noinput = 150;//noinput timer in frames
+	this.disabled = 0;
+	this.side = side;
+
+	this.prevForward = 0;
+	this.slamCooldown = 0;
+	this.slamCounted = false;
+	this.bounced = false;
+
+	this.trails = [];
+	this.trailLength = 4;
+
+	this.initTrails = function(){
+		this.trails = [];
+		for(let x = 0; x < this.trailLength; x++){
+			this.trails.push([]);
+			this.trails[x].push(new V(...this.p.add(this.s.scale(1/2).rotate(this.ang)).listify()));
+			this.trails[x].push(new V(...this.p.add(this.s.scale(1/2).flipX().rotate(this.ang)).listify()));
+		}
+	}
+	this.initTrails();
+
+	this.update = function(){
+		if(this.disabled === 1){
+			if(this.side === 0){
+				this.p.x = arena.width/2 - 350;
+				this.p.y = arena.height/2 + (car2.p.y >= arena.height/2? -250 : 250);
+				this.ang = (car2.p.y >= arena.height/2? 3*Math.PI/4:Math.PI/4);
+			}
+			if(this.side === 1){
+				this.p.x = arena.width/2 + 350;
+				this.p.y = arena.height/2 + (car1.p.y >= arena.height/2? -250 : 250);
+				this.ang = (car1.p.y >= arena.height/2? -3*Math.PI/4:-Math.PI/4);
+			}
+			this.initTrails();
+		}
+		this.getInput();
+		this.move();
+		this.draw();
+	}
+
+	this.getInput = function(){
+		if(this.disabled > 0)
+			this.disabled--;
+		if(this.noinput > 0){
+			this.noinput--;
+			return;
+		}
+		if(this.prevForward > 0)
+			this.prevForward--;
+		if(this.slamCooldown > 0)
+			this.slamCooldown--;
+		this.i = new V(0,0);
+		for(let x = 0; x < arena.key.length; x++){
+			let k = arena.key[x].toLowerCase();
+			
+			switch(k){
+				case this.inputs[0].toLowerCase():
+					this.i.y -= 0.5;
+					if(this.drift){//up pressed this frame
+						if(this.prevForward > 0){//pressed quickly
+							if(this.slamCooldown > 0)//slam hasnt cooled down yet
+								break;
+							this.i.y -= 9.5;//slam
+							this.prevForward = 0;
+							this.slamCooldown = 100;
+							this.slamCounted = false;
+							this.bounced = false;
+						}else{
+							this.prevForward = 15;
+						}
+					}
+					break;
+				case this.inputs[1].toLowerCase(): 
+					this.ang -= (Math.PI/16) * (this.drift ? this.dscale:(this.v.mag()/22)); break;
+				case this.inputs[2].toLowerCase(): 
+					this.ang += (Math.PI/16) * (this.drift ? this.dscale:(this.v.mag()/22)); break;
+			}
+		}
+		this.drift = this.i.y === 0;
+	}
+
+	this.move = function(){
+		//add input to acc
+		this.a.set(this.i.scale(1.2));
+
+		//if not drifting, turn
+		if(!this.drift)
+			this.v = this.v.add(this.a.rotate(this.ang));
+
+		//add friction based on mode
+		this.v = this.v.rotate(-this.ang).mult(this.drift? this.df:this.f).rotate(this.ang);
+		
+		//remove unnecessary x-v
+		if(Math.abs(this.v.rotate(-this.ang).x) < 0.25){
+			this.v = this.v.rotate(-this.ang);
+			this.v.x = 0;
+			this.v = this.v.rotate(this.ang)
+		}
+
+		//add to pos
+		this.p = this.p.add(this.v);
+
+		//hit walls and update trail positions
+		if(this.inputs[0] !== '')
+			this.hitWalls();
+		
+		this.updateTrails();
+
+		for(col of colliders){
+			if(this.disabled === 0)
+				this.collide(col, false);
+		}
+	}
+
+	this.collide = function(c, d){
+		if(this.p.dist(c.p) <= this.r + c.r){
+			if(!d){//lame stuff
+				//a hit!
+				//deoverlap
+				let t = Math.atan2(c.p.y-this.p.y, c.p.x-this.p.x);
+				this.p = c.p.add(new V(this.r + c.r, 0).rotate(t+0.00001).scale(-1));
+				//get local-x and reverse
+				this.v = this.v.rotate(-t);
+				this.v.x -= c.v.rotate(-t).x * this.m;
+				this.v = this.v.flipX().rotate(t);
+				this.bounced = true;
+
+			}else{//car
+				//demo
+				let demoTimer = 100 - 15;
+				if(c.slamCooldown > demoTimer && this.slamCooldown <= demoTimer && !c.bounced){//orange slams blu
+					let demo = new V(0,0);
+					demo.set(this.p);
+					car1 = new car(arena.width/2 - 350, arena.height/2 - 250, 3*Math.PI/4, ['w', 'a', 'd'], colors.left, 0);
+					car1.demoCircle.set(demo);
+					car1.disabled = 150;
+					car1.noinput = 0;
+					car2.slamCooldown = 200;
+					arena.stats[1].demos++;
+					return;
+				}
+
+				if(this.slamCooldown > demoTimer && c.slamCooldown <= demoTimer && !this.bounced){//blue slams orng
+					let demo = new V(0,0);
+					demo.set(c.p);
+					car2 = new car(arena.width/2 + 350, arena.height/2 + 250, -Math.PI/4, ['ArrowUp', 'ArrowLeft', 'ArrowRight'], colors.right, 1);
+					car2.demoCircle.set(demo);
+					car2.disabled = 150;
+					car2.noinput = 0;
+					car1.slamCooldown = 200;
+					arena.stats[0].demos++;
+					return;
+				}
+
+				let t = Math.atan2(c.p.y-this.p.y, c.p.x-this.p.x);
+				let t2 = Math.atan2(this.p.y-c.p.y, this.p.x-c.p.x);
+				//deoverlap equally
+				let tempP = new V(0,0);
+				tempP.set(this.p);
+
+				this.p = c.p.add(new V(this.r + c.r, 0).rotate(t).scale(-1));
+				c.p = tempP.add(new V(c.r + this.r, 0).rotate(t2).scale(-1));
+				//collide
+				let tempV = new V(0,0);
+				tempV.set(this.v);
+
+				this.v = this.v.rotate(-t);
+				this.v.x -= c.v.rotate(-t).x * this.m;
+				this.v = this.v.flipX().rotate(t);
+
+				c.v = c.v.rotate(-t2);
+				c.v.x -= tempV.rotate(-t2).x * this.m;
+				c.v = c.v.flipX().rotate(t2);
+			}
+		}
+	}
+
+	this.hitWalls = function(){
+		//lame but necessary
+		let oldv = new V(0,0);
+		oldv.set(this.v);
+
+		//left
+		if(this.p.x < this.r+arena.borders.x && (this.p.y < arena.height/2 - arena.goalHeight/2 || this.p.y > arena.height/2 + arena.goalHeight/2)){
+			this.p.x = this.r+arena.borders.x;
+			this.v = this.v.flipX().scale(this.bounceFactor);
+		}
+		//net
+		if(this.p.x + this.r < 0){
+			this.p.x = arena.width + this.r;
+			//this.v = this.v.flipX().scale(this.bounceFactor);
+			this.initTrails();
+		}
+		//innergoal
+		if(this.p.x < arena.borders.x - this.r){
+			//top (10 = post radius)
+			if(this.p.y < arena.height/2 - arena.goalHeight/2 + 10 + this.r){
+				this.p.y = arena.height/2 - arena.goalHeight/2 + 10 + this.r;
+				this.v = this.v.flipY().scale(this.bounceFactor);
+			}
+			//bottom
+			if(this.p.y > arena.height/2 + arena.goalHeight/2 - 10 - this.r){
+				this.p.y = arena.height/2 + arena.goalHeight/2 - 10 - this.r;
+				this.v = this.v.flipY().scale(this.bounceFactor);
+			}
+		}
+		//right
+		if(this.p.x > arena.width-this.r-arena.borders.x && (this.p.y < arena.height/2 - arena.goalHeight/2 || this.p.y > arena.height/2 + arena.goalHeight/2)){
+			this.p.x = arena.width-this.r-arena.borders.x;
+			this.v = this.v.flipX().scale(this.bounceFactor);
+		}
+		//net
+		if(this.p.x - this.r > arena.width){
+			this.p.x = -this.r;
+			//this.v = this.v.flipX().scale(this.bounceFactor);
+			this.initTrails();
+		}
+		//innergoal
+		if(this.p.x > arena.width - arena.borders.x + this.r){
+			//the +10 is 2x the post radius.
+			//top
+			if(this.p.y < arena.height/2 - arena.goalHeight/2 + 10 + this.r){
+				this.p.y = arena.height/2 - arena.goalHeight/2 + 10 + this.r;
+				this.v = this.v.flipY().scale(this.bounceFactor);
+			}
+			//bottom
+			if(this.p.y > arena.height/2 + arena.goalHeight/2 - 10 - this.r){
+				this.p.y = arena.height/2 + arena.goalHeight/2 - 10 - this.r;
+				this.v = this.v.flipY().scale(this.bounceFactor);
+			}
+		}
+
+		if(this.p.y < this.r+arena.borders.y){
+			this.p.y = this.r+arena.borders.y;
+			this.v = this.v.flipY().scale(this.bounceFactor);
+		}
+		if(this.p.y > arena.height-this.r-arena.borders.y){
+			this.p.y = arena.height-this.r-arena.borders.y;
+			this.v = this.v.flipY().scale(this.bounceFactor);
+		}
+
+		//block teleports on your side
+		if(this.p.x - this.r < 0 && this.side === 0 && this.v.x < 0){
+			this.p.x = this.r;
+			this.v = this.v.flipX().scale(this.bounceFactor);
+		}
+		if(this.p.x + this.r > arena.width && this.side === 1 && this.v.x > 0){
+			this.p.x = arena.width - this.r;
+			this.v = this.v.flipX().scale(this.bounceFactor);
+		}
+
+		//check if vel has changed, iecollision occured
+		if(this.v.x !== oldv.x || this.v.y !== oldv.y){
+			this.bounced = true;
+		}
+	}
+
+	this.updateTrails = function(){
+		//updates the position of trails
+		this.trails.push([]);
+		this.trails[this.trails.length-1].push(new V(...this.p.add(this.s.scale(1/2).rotate(this.ang)).listify()));
+		this.trails[this.trails.length-1].push(new V(...this.p.add(this.s.scale(1/2).flipX().rotate(this.ang)).listify()));
+		this.trails.splice(0, 1);
+	}
+
+	this.draw = function(){
+		
+		let ctx = arena.ctx;
+		
+		if(this.disabled > 0){
+			if(this.disabled < 100)
+				return;
+			ctx.beginPath();
+			ctx.moveTo(this.demoCircle.x + 600 - 4*this.disabled, this.demoCircle.y)
+			ctx.fillStyle = `${this.col}7`;
+			ctx.arc(...this.demoCircle.listify(), 600 - 4*this.disabled, 0, 2*Math.PI);
+			ctx.fill();	
+			return;
+		}
+		
+		//draw collider
+		ctx.beginPath();
+		ctx.fillStyle = this.slamCooldown === 0? '#FFF7':'#FFF4';
+		ctx.arc(...this.p.listify(), this.r, 0, Math.PI*2);
+		ctx.fill();
+
+		//rotate+draw
+		ctx.beginPath();
+		ctx.fillStyle = this.noinput <= 0? this.col:(this.noinput <= 50? '#0F0':(this.noinput <= 100? '#FF0':(this.noinput <= 150? '#F00':'#FFF2')));
+		ctx.save();
+			
+		ctx.translate(...this.p.listify());
+		ctx.rotate(this.ang);
+		ctx.translate(...this.p.scale(-1).listify())
+
+		//ctx.fillRect(...this.p.add(this.s.scale(-1/2)).listify(), ...this.s.listify());
+		ctx.moveTo(this.p.x, this.p.y-this.s.y/2);
+		ctx.lineTo(this.p.x - this.s.x/2, this.p.y + this.s.y/2);
+		ctx.lineTo(this.p.x + this.s.x/2, this.p.y + this.s.y/2);
+		ctx.fill();
+
+		ctx.restore();
+
+		//draw trails
+		if(!this.drift)
+		this.drawTrails();
+	}
+
+	this.drawTrails = function(){
+		let ctx = arena.ctx;
+
+		ctx.beginPath();
+		ctx.strokeStyle = 'white';
+		ctx.moveTo(...this.trails[0][0].listify());
+		for(let x = 0; x < this.trailLength; x++)
+			ctx.lineTo(...this.trails[x][0].listify());
+		ctx.stroke();
+
+		ctx.beginPath();
+		ctx.strokeStyle = 'white';
+		ctx.moveTo(...this.trails[0][1].listify());
+		for(let x = 0; x < this.trailLength; x++)
+			ctx.lineTo(...this.trails[x][1].listify());
+		ctx.stroke();
+	}
+}
+
+function ball(){
+	this.p = new V(arena.width/2, arena.height/2);
+	this.v = new V(0,0);
+	this.m = 2;
+	this.r = 30;
+	this.f = 0.98;
+	this.minV = 0.5;
+	this.maxV = 22;
+
+	this.update = function(){
+		//beyond goalline and in y-boundaries
+		if(this.p.x + this.r < arena.goalLines[0] && this.p.y + this.r < arena.height/2 + arena.goalHeight/2 && this.p.y - this.r > arena.height/2 - arena.goalHeight/2){
+			arena.score[1]++;
+			this.updatelastGoal(1);
+			reset();
+		}
+		if(this.p.x - this.r > arena.goalLines[1] && this.p.y + this.r < arena.height/2 + arena.goalHeight/2 && this.p.y - this.r > arena.height/2 - arena.goalHeight/2){
+			arena.score[0]++;
+			this.updatelastGoal(0);
+			reset();
+		}
+		
+		this.move();
+		this.draw();
+	}
+
+	this.updatelastGoal = function(side){
+		fastestGoal = Math.floor(this.v.mag() * 10) > fastestGoal ? Math.floor(this.v.mag() * 10) : fastestGoal;
+		lastGoal = Math.floor(this.v.mag() * 10);
+
+		if(fastestGoal > arena.stats[side].fast){
+			arena.stats[side].fast = lastGoal;
+			console.log(arena.stats);
+		}
+			
+	}
+
+	this.move = function(){
+		//add friction above min value, cap at max-v
+		if(this.v.mag() > this.minV)
+			this.v = this.v.scale(this.f);
+		if(this.v.mag() > this.maxV)
+			this.v = this.v.scale(this.maxV/this.v.mag());
+
+		//hit walls
+		this.hitWalls();
+
+		//add forces
+		this.collide(car1, true);
+		this.collide(car2, true);
+
+		//bounce off colliders
+		for(col of colliders)
+			this.collide(col);
+		
+		//update pos
+		this.p = this.p.add(this.v);
+	}
+
+	this.collide = function(c, d){
+		if(this.p.dist(c.p) <= this.r + c.r){
+			//a hit!
+			//deoverlap
+			let t = Math.atan2(c.p.y-this.p.y, c.p.x-this.p.x);
+			this.p = c.p.add(new V(this.r + c.r, 0).rotate(t+0.00001).scale(-1));
+			//get local-x and reverse
+			let originalv = new V(0,0);
+			originalv.set(this.v);
+
+			this.v = this.v.rotate(-t);
+			this.v.x -= c.v.rotate(-t).x * this.m;
+			this.v = this.v.flipX().rotate(t).scale(0.6).add(c.v.scale(0.4));
+			if(d){
+				//hitting a car
+				if(c.disabled > 0)
+					return;//if disabled then its NOT THERE
+				c.v = c.v.add(this.v.add(originalv.scale(-1)).flipX().flipY().scale(0.75));
+				c.bounced = true;
+				
+				//update slams,saves,touches
+				arena.stats[c.side].touches++;
+				
+				if(this.p.x - this.r < arena.goalLines[0] && c.side == 0){
+					//left save
+					arena.stats[0].saves++;
+				}
+				if(this.p.x + this.r > arena.goalLines[1] && c.side == 1){
+					//right save
+					arena.stats[1].saves++;
+				}
+				if(c.slamCooldown > 50 && !c.slamCounted){
+					arena.stats[c.side].slams++;//slammed
+					c.slamCounted = true;
+				}
+			}
+		}
+	}
+
+	this.hitWalls = function(){
+		//lame but necessary
+		//left
+		if(this.p.x < this.r+arena.borders.x && (this.p.y < arena.height/2 - arena.goalHeight/2 || this.p.y > arena.height/2 + arena.goalHeight/2)){
+			this.p.x = this.r+arena.borders.x;
+			this.v = this.v.flipX();
+		}
+		//net
+		if(this.p.x < this.r){
+			this.p.x = this.r;
+			this.v = this.v.flipX();
+		}
+		//innergoal
+		if(this.p.x < arena.borders.x - this.r){
+			//the +10 is 2x the post radius.
+			//top
+			//only 10px for innerposts to stop glitchies
+			if(this.p.y < arena.height/2 - arena.goalHeight/2 + this.r + 10 && this.p.y > arena.height/2 - arena.goalHeight/2 + this.r){
+				this.p.y = arena.height/2 - arena.goalHeight/2 + this.r + 10;
+				this.v = this.v.flipY();
+			}
+			//bottom
+			if(this.p.y > arena.height/2 + arena.goalHeight/2 - this.r - 10 && this.p.y < arena.height/2 + arena.goalHeight/2 - this.r){
+				this.p.y = arena.height/2 + arena.goalHeight/2 - this.r - 10;
+				this.v = this.v.flipY();
+			}
+		}
+		//right
+		if(this.p.x > arena.width-this.r-arena.borders.x && (this.p.y < arena.height/2 - arena.goalHeight/2 || this.p.y > arena.height/2 + arena.goalHeight/2)){
+			this.p.x = arena.width-this.r-arena.borders.x;
+			this.v = this.v.flipX();
+		}
+		//net
+		if(this.p.x > arena.width-this.r){
+			this.p.x = arena.width-this.r;
+			this.v = this.v.flipX();
+		}
+		//innergoal
+		if(this.p.x > arena.width - arena.borders.x + this.r){
+			//top
+			if(this.p.y < arena.height/2 - arena.goalHeight/2 + this.r + 10){
+				this.p.y = arena.height/2 - arena.goalHeight/2 + this.r + 10;
+				this.v = this.v.flipY();
+			}
+			//bottom
+			if(this.p.y > arena.height/2 + arena.goalHeight/2 - this.r - 10){
+				this.p.y = arena.height/2 + arena.goalHeight/2 - this.r - 10;
+				this.v = this.v.flipY();
+			}
+		}
+
+		if(this.p.y < this.r+arena.borders.y){
+			this.p.y = this.r+arena.borders.y;
+			this.v = this.v.flipY();
+		}
+		if(this.p.y > arena.height-this.r-arena.borders.y){
+			this.p.y = arena.height-this.r-arena.borders.y;
+			this.v = this.v.flipY();
+		}
+	}
+
+	this.draw = function(){
+		let ctx = arena.ctx;
+
+		ctx.beginPath();
+		ctx.strokeStyle = 'white';
+		ctx.arc(...this.p.listify(), this.r, 0, 2*Math.PI);
+		ctx.stroke();
+
+		if(this.p.x - this.r < arena.goalLines[0]){
+			let t = Math.acos((arena.goalLines[0] - this.p.x)/this.r);1
+			
+			ctx.beginPath();
+			ctx.fillStyle = 'white';
+			ctx.arc(...this.p.listify(), this.r, -t, t);
+			ctx.fill();
+		}else if(this.p.x + this.r > arena.goalLines[1]){
+			let t = Math.acos((this.p.x - arena.goalLines[1])/this.r);1
+			
+			ctx.beginPath();
+			ctx.save()
+			ctx.translate(...this.p.listify());
+			ctx.rotate(Math.PI);
+			ctx.fillStyle = 'white';
+			ctx.arc(0,0, this.r, -t, t);
+			ctx.fill();
+			ctx.restore();
+		}else{
+			ctx.beginPath();
+			ctx.fillStyle = 'white';
+			ctx.arc(...this.p.listify(), this.r, 0, Math.PI*2);
+			ctx.fill();
+		}
+	}
+}
+
+function V(x, y){
+	this.x = x;
+	this.y = y;
+
+	this.add = function(other){
+		return new V(this.x+other.x, this.y+other.y);
+	}
+
+	this.scale = function(s){
+		return new V(this.x*s, this.y*s);
+	}
+
+	this.mult = function(other){
+		return new V(this.x*other.x, this.y*other.y);
+	}
+
+	this.listify = function(){
+		return [this.x, this.y];
+	}
+
+	this.set = function(other){
+		this.x = other.x;
+		this.y = other.y;
+	}
+
+	this.rotate = function(angle){
+		let ang = Math.atan2(this.y, this.x) + angle;
+		let r = this.mag();
+		return new V(r*Math.cos(ang), r*Math.sin(ang));
+
+	}
+
+	this.mag = function(){
+		return Math.sqrt(this.x*this.x + this.y*this.y);
+	}
+
+	this.flipX = function(){
+		return new V(-this.x, this.y);
+	}
+
+	this.flipY = function(){
+		return new V(this.x, -this.y);
+	}
+
+	this.dist = function(other){
+		return Math.sqrt(Math.pow(this.x-other.x, 2) + Math.pow(this.y-other.y,2));
+	}
+
+	this.normalize = function(){
+		return new V(this.x/this.mag(), this.y/this.mag());
+	}
+}
+
+</script>
+</body>
+</html>
